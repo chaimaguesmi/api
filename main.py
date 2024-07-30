@@ -45,8 +45,14 @@ class OltForm(BaseModel):
     manufacturer: str
     model: str
     installation_date: str
-
-
+class PortForm(BaseModel):
+    port_number: int
+    port_ftth: int
+    carte: int
+    sro: str
+    cable_ftth: int
+    status: str
+    olt_id: int
 # Endpoint pour l'inscription
 @app.post("/signup")
 async def sign_up(form: SignUpForm):
@@ -115,3 +121,44 @@ async def update_olts(id: int, olt: OltForm):
     olt = cursor.fetchone()
     conn.commit()
     return {"message": "OLT updated successfully"}
+@app.get("/ports/{olt_id}")
+async def get_ports(olt_id: int):
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM ports WHERE olt_id = %s", (olt_id,))
+    return cursor.fetchall()
+@app.post("/add_ports")
+async def add_ports(port: PortForm):
+    cursor=conn.cursor(dictionary=True)
+    # Vérifier si l'utilisateur existe déjà
+    cursor.execute("SELECT * FROM ports WHERE port_number = %s && olt_id=%s", (port.port_number,port.olt_id))
+    existing_port = cursor.fetchone()
+    if existing_port:
+        raise HTTPException(status_code=400, detail="port_number token already exists")
+
+    # Insérer l'utilisateur dans la base de données
+    sql = "INSERT INTO ports (port_number,port_ftth,carte,sro,cable_ftth, status,olt_id) VALUES (%s, %s, %s, %s, %s,%s,%s);"
+    val = (port.port_number,port.port_ftth,port.carte,port.sro,port.cable_ftth,port.status,port.olt_id)
+    cursor.execute(sql, val)
+    conn.commit()
+    return "added successfully"
+@app.put("/update_port/{port_number}/{olt_id}")
+async def update_port(port_number: int, port: PortForm,olt_id:int):
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+            UPDATE ports
+            SET port_number = %s, status = %s, olt_id = %s, port_ftth = %s, carte = %s,cable_ftth = %s,sro = %s
+            WHERE port_number = %s && olt_id=%s
+        """, (port.port_number, port.status, port.olt_id,port.port_ftth, port.carte,port.cable_ftth,port.sro, port_number,olt_id))
+    port = cursor.fetchone()
+    conn.commit()
+    return {"message": "OLT updated successfully"}
+@app.delete("/delete_ports/{port_number}/{olt_id}")
+async def delete_ports(port_number: int ,olt_id:int):
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM ports WHERE port_number = %s AND olt_id = %s", (port_number,olt_id))
+    port = cursor.fetchone()
+    if not port:
+        raise HTTPException(status_code=404, detail="olt not found")
+    cursor.execute("delete from ports where port_number=%s AND olt_id = %s",(port_number,olt_id))
+    conn.commit()
+    return "delete successfully"
